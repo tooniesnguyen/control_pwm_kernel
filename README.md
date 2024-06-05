@@ -1,35 +1,62 @@
-#include <linux/module.h>
-#include <linux/init.h>
-#include <linux/i2c.h>
-#include <linux/device.h>
-#include <linux/fs.h>
-#include <linux/uaccess.h>
+# Driver Control PWM Motor
 
-#define DRIVER_NAME "mpu6050_driver"
-#define CLASS_NAME "mpu6050"
-#define DEVICE_NAME "mpu6050"
+### Hardware requirements
+- [Raspberry Pi 3 Model B+](https://raspberrypi.vn/san-pham/raspberry-pi-3-model-b)
+- [PID Driver for DC motor](http://www.roboconshop.com/San-Pham/%C4%90ien-tu/Driver-and-controller/PID-Driver-for-DC-motor.aspx)
+- [STM32 F4]()
 
-#define MPU6050_REG_ACCEL_XOUT_H 0x3B
-#define MPU6050_REG_PWR_MGMT_1 0x6B
+### Connect
 
-#define SWERVE_REG_SPEED 0x22
+| STM32F4 | Board pin | Physical RPi pin | RPi pin name | Beaglebone Black pin name |
+|----------------|-----------|------------------|--------------| --------------------------|
+| SDA            | 1         | 24               | GPIO8, CE0   | P9\_17, SPI0\_CS0         |
+| SCK            | 2         | 23               | GPIO11, SCKL | P9\_22, SPI0\_SCLK        |
+| MOSI           | 3         | 19               | GPIO10, MOSI | P9\_18, SPI0\_D1          |
+| MISO           | 4         | 21               | GPIO9, MISO  | P9\_21, SPI0\_D0          |
+| IRQ            | 5         | 18               | GPIO24       | P9\_15, GPIO\_48          |
+| GND            | 6         | 6, 9, 20, 25     | Ground       | Ground                    |
+| RST            | 7         | 22               | GPIO25       | P9\_23, GPIO\_49          |
+| 3.3V           | 8         | 1,17             | 3V3          | VDD\_3V3                  |
 
-// IOCTL commands
-#define MPU6050_IOCTL_MAGIC 'm'
-#define MPU6050_IOCTL_READ_X _IOR(MPU6050_IOCTL_MAGIC, 1, int)
-#define MPU6050_IOCTL_READ_Y _IOR(MPU6050_IOCTL_MAGIC, 2, int)
-#define MPU6050_IOCTL_READ_Z _IOR(MPU6050_IOCTL_MAGIC, 3, int)
+### Clone project
+```
+git clone https://github.com/tooniesnguyen/pwm_driver
+
+cd pwm_driver
+```
+
+### Building and Installing the Module
+```
+sudo echo 0x17 > /sys/bus/i2c/devices/i2c-1/new_device
+
+make
+
+sudo insmod my_i2c_driver.ko
+```
+
+### Uninstalling the Module
+
+```
+sudo rmmod my_i2c_driver.
+```
 
 
-MODULE_LICENSE("GPL");
-MODULE_AUTHOR("EMBEDDED 4 GNU/Linux");
-MODULE_DESCRIPTION("A simple I2C Device driver with driver_data");
 
-static struct i2c_client *mpu6050_client;
-static struct class* mpu6050_class = NULL;
-static struct device* mpu6050_device = NULL;
-static int major_number;
+### User Interface Code
+```
+/*CODE BEGIN Includes */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include <errno.h> // Include errno header
+/*CODE END Includes  */
 
+/*CODE BEGIN DEFINE */
+#define DEVICE_PATH "/dev/mpu6050"
 typedef enum SwerveParamRegister{
 	DEV_REG_SPEED_KP = 1,
 	DEV_REG_SPEED_KI,
@@ -45,207 +72,95 @@ typedef enum SwerveParamRegister{
 }SwerveParamRegister;
 
 #define SWERVE_MODULE_MAGIC_WORD 's'
-#define SWERVE_IOCTL_SEND_TARGET_SPEED _IOW(SWERVE_MODULE_MAGIC_WORD,DEV_REG_TARGET_SPEED,u8)
-#define SWERVE_IOCTL_SEND_TARGET_ANGLE _IOW(SWERVE_MODULE_MAGIC_WORD,DEV_REG_TARGET_ANGLE,u8)
-#define SWERVE_IOCTL_SET_MODE _IOW(SWERVE_MODULE_MAGIC_WORD,DEV_REG_MODE,u8)
-#define SWERVE_IOCTL_READ_CURRENT_ANGLE _IOR(SWERVE_MODULE_MAGIC_WORD,17,u8)
+#define SWERVE_IOCTL_SEND_TARGET_SPEED _IOW(SWERVE_MODULE_MAGIC_WORD,DEV_REG_TARGET_SPEED,uint8_t)
+#define SWERVE_IOCTL_SEND_TARGET_ANGLE _IOW(SWERVE_MODULE_MAGIC_WORD,DEV_REG_TARGET_ANGLE,uint8_t)
+#define SWERVE_IOCTL_READ_CURRENT_ANGLE _IOR(SWERVE_MODULE_MAGIC_WORD,17,uint8_t)
+#define SWERVE_IOCTL_SET_MODE _IOW(SWERVE_MODULE_MAGIC_WORD,DEV_REG_MODE,uint8_t)
+/*CODE END DEFINE */
 
-static struct i2c_device_id my_ids[] = {
-	{"mpu6050", 0},
-    {"swerve", 0},
-    {},
-};
-MODULE_DEVICE_TABLE(i2c, my_ids);
+/*CODE BEGIN SET ARRAY*/
+uint8_t txBuffer[10] = {0};
+uint8_t rxBuffer[10] = {0};
+/*CODE END SET ARRAY*/
 
-static int mpu6050_read_axis(struct i2c_client *client, int axis)
+void PutMessage(void* data, uint8_t sizeOfData)
 {
-    u8 buf[6];
-    s16 accel_data[3];
+    memcpy(txBuffer, data, sizeOfData);
+}
 
-    if (i2c_smbus_read_i2c_block_data(client, MPU6050_REG_ACCEL_XOUT_H, sizeof(buf), buf) < 0) {
-        printk(KERN_ERR "Failed to read accelerometer data\n");
-        return -EIO;
+
+int main() {
+    int fd;
+
+    /* USER BEGIN CONFIG CHANGE VALUE*/
+    uint8_t targetSpeed = 99;
+    uint8_t targetAngle = 45;
+    uint8_t mode = 1;
+    /* USER END CONFIG CHANGE VALUE*/
+
+    // Open the device
+    fd = open(DEVICE_PATH, O_RDONLY);
+    if (fd < 0) {
+        perror("Failed to open the device");
+        return errno;
     }
 
-    // Combine high and low bytes to form 16-bit values
-    accel_data[0] = (buf[0] << 8) | buf[1]; // X axis
-    accel_data[1] = (buf[2] << 8) | buf[3]; // Y axis
-    accel_data[2] = (buf[4] << 8) | buf[5]; // Z axis
-
-    return accel_data[axis];
-}
-
-static u8 swerve_received_data(struct i2c_client *client, u8 reg)
-{
-    u8 value;
-    value = i2c_smbus_read_byte_data(client, reg);
-    printk("Value read: %u from reg: %u",value, reg);
-    return value;
-}
-
-static int swerve_send_data(struct i2c_client *client, u8 data, u8 reg)
-{
-    if(i2c_smbus_write_byte_data(client, reg, data) < 0){
-            printk("Failed to send data");
-            return -EIO;
+    // Write speed to DEV_REG_TARGET_SPEED
+    if (ioctl(fd, SWERVE_IOCTL_SEND_TARGET_SPEED, &targetSpeed) < 0) {
+        perror("Failed to send speed");
+        close(fd);
+        return errno;
     }
     
-    return 1;
-}
-
-static long swerve_ioctl(struct file *file, unsigned int cmd, unsigned long arg){
-    int data;
-    u8 value;
-    u8 receiveData;
-    switch (cmd) {
-        case SWERVE_IOCTL_SEND_TARGET_SPEED:
-            if(copy_from_user(&value,(u8 __user *)arg,sizeof(value))){
-                printk("Data write from user error");
-            }
-            printk("Target speed: %u", value);
-            data = swerve_send_data(mpu6050_client, value, DEV_REG_TARGET_SPEED);
-            break;
-        case SWERVE_IOCTL_SEND_TARGET_ANGLE:
-            if(copy_from_user(&value,(u8 __user *)arg,sizeof(value))){
-                printk("Data write from user error");
-            }
-            printk("Target angle: %u", value);
-            data = swerve_send_data(mpu6050_client, value, DEV_REG_TARGET_ANGLE);
-            break;
-        case SWERVE_IOCTL_SET_MODE:
-            if(copy_from_user(&value,(u8 __user *)arg,sizeof(value))){
-                printk("Data write from user error");
-            }
-            printk("Mode set: %u", value);
-            data = swerve_send_data(mpu6050_client, value, DEV_REG_MODE);
-            break;
-        case SWERVE_IOCTL_READ_CURRENT_ANGLE:
-            receiveData = swerve_received_data(mpu6050_client, DEV_REG_TARGET_ANGLE);
-            if (copy_to_user((u8 __user *)arg, &receiveData, sizeof(receiveData))) {
-                return -EFAULT;
-            }
-            printk("Receive data angle: %u", receiveData);
-            break;
-        default:
-            return -EINVAL;
+    // Write angle to DEV_REG_TARGET_ANGLE
+    if (ioctl(fd, SWERVE_IOCTL_SEND_TARGET_ANGLE, &targetAngle) < 0) {
+        perror("Failed to send angle");
+        close(fd);
+        return errno;
     }
-
+    // Set mode to DEV_REG_MODE
+    if (ioctl(fd, SWERVE_IOCTL_SET_MODE, &mode) < 0) {
+        perror("Failed to set mode");
+        close(fd);
+        return errno;
+    }
     
-
-    return 0;
-}    
-
-static long mpu6050_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
-{
-    int data;
-
-    switch (cmd) {
-        case MPU6050_IOCTL_READ_X:
-            data = mpu6050_read_axis(mpu6050_client, 0);
-            break;
-        case MPU6050_IOCTL_READ_Y:
-            data = mpu6050_read_axis(mpu6050_client, 1);
-            break;
-        case MPU6050_IOCTL_READ_Z:
-            data = mpu6050_read_axis(mpu6050_client, 2);
-            break;
-        default:
-            return -EINVAL;
+    /*
+    // Read angle from DEV_REG_TARGET_ANGLE
+    if (ioctl(fd, SWERVE_IOCTL_READ_CURRENT_ANGLE, &targetAngle) < 0) {
+        perror("Failed to read angle");
+        close(fd);
+        return errno;
     }
-
-    if (copy_to_user((int __user *)arg, &data, sizeof(data))) {
-        return -EFAULT;
+    else {
+        printf("Read Angle + 1: %u\n",targetAngle);
     }
-
-    return 0;
-}
-
-static int mpu6050_open(struct inode *inodep, struct file *filep)
-{
-    printk(KERN_INFO "MPU6050 device opened\n");
-    return 0;
-}
-
-static int mpu6050_release(struct inode *inodep, struct file *filep)
-{
-    printk(KERN_INFO "MPU6050 device closed\n");
-    return 0;
-}
-
-static struct file_operations fops = {
-    .open = mpu6050_open,
-    .unlocked_ioctl = swerve_ioctl,
-    .release = mpu6050_release,
-};
-
-static int my_probe(struct i2c_client *client, const struct i2c_device_id *id)
-{	
-    /*  
-    This function to check 
-    */
-    mpu6050_client = client;
-    printk("mpu6050_driver - Now I am in the probe function!\n");
     
-    // Create a char device
-    // https://archive.kernel.org/oldlinux/htmldocs/kernel-api/API---register-chrdev.html
-    // Positive: the number of major that successful registered
-    major_number = register_chrdev(0, DEVICE_NAME, &fops);
-    if (major_number < 0) {
-        printk(KERN_ERR "Failed to register a major number\n");
-        return major_number;
-    }
+*/
 
-    // https://www.kernel.org/doc/html/latest/driver-api/infrastructure.html?highlight=class_create
-    // THIS_MODULE là tiêu chuẩn để địa diện cho module hiện tại
-    // This is used to create a struct class pointer that can then be used in calls to device_create().
-    mpu6050_class = class_create(THIS_MODULE, CLASS_NAME);
-    if (IS_ERR(mpu6050_class)) {
-        // https://manpages.debian.org/testing/linux-manual-4.8/__unregister_chrdev.9
-        // Unregister and destroy the cdev occupying the region described by major, baseminor and count. This function undoes what __register_chrdev did.
-        unregister_chrdev(major_number, DEVICE_NAME);
-        printk(KERN_ERR "Failed to register device class\n");
-        return PTR_ERR(mpu6050_class);
-    }
-
-    // https://www.kernel.org/doc/html/latest/driver-api/infrastructure.html?highlight=device_create
-    // A struct device will be created in sysfs, registered to the specified class.
-    // MKDEV(int major, int minor) gộp số major và minor để tạo thành device number
-    mpu6050_device = device_create(mpu6050_class, NULL, MKDEV(major_number, 0), NULL, DEVICE_NAME);
-    if (IS_ERR(mpu6050_device)) {
-        class_destroy(mpu6050_class);
-        unregister_chrdev(major_number, DEVICE_NAME);
-        printk(KERN_ERR "Failed to create the device\n");
-        return PTR_ERR(mpu6050_device);
-    }
-
-    printk(KERN_INFO "MPU6050 driver installed\n");
-
-	return 0;
+    // Close the device
+    close(fd);
+    return 0;
 }
 
-static void my_remove(struct i2c_client *client)
-{
-    device_destroy(mpu6050_class, MKDEV(major_number, 0));
-    class_unregister(mpu6050_class);
-    class_destroy(mpu6050_class);
-    unregister_chrdev(major_number, DEVICE_NAME);
-    printk("my_i2c_driver - Removing device\n");
-}
+```
 
-static const struct of_device_id mpu6050_of_match[] = {
-    { .compatible = "invensense,mpu6050", },
-    { },
-};
-MODULE_DEVICE_TABLE(of, mpu6050_of_match);
 
-static struct i2c_driver my_driver= {
-	.probe = my_probe,
-	.remove = my_remove,
-	.id_table = my_ids,
-	.driver = {
-		.name = DRIVER_NAME,
-		.of_match_table = of_match_ptr(mpu6050_of_match),
-	}
-};
 
-module_i2c_driver(my_driver);
+### Tips
+Show the kernel log to check the install state or instantiated:
+```
+dmesg | tail 
+```
+
+To scan I2C bus 1 for connected I2C devices:
+```
+i2cdetect -y 1
+```
+
+To list all module installed:
+
+```
+ls /dev
+```
+
