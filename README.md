@@ -84,6 +84,11 @@ Speed - Angle
 0 120
 ```
 
+### Function For User Interface
+- `SWERVE_IOCTL_SEND_TARGET_SPEED`: to control target speed
+- `SWERVE_IOCTL_SEND_TARGET_ANGLE`: to control target angle
+
+
 ### Tips
 Show the kernel log to check the install state or instantiated:
 ```
