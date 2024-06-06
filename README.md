@@ -3,7 +3,8 @@
 ### Hardware requirements
 - [Raspberry Pi 3 Model B+](https://raspberrypi.vn/san-pham/raspberry-pi-3-model-b)
 - [PID Driver for DC motor](http://www.roboconshop.com/San-Pham/%C4%90ien-tu/Driver-and-controller/PID-Driver-for-DC-motor.aspx)
-- [STM32 F103C8T6]()
+- [STM32 F103C8T6](https://hshop.vn/products/kit-ra-chon-stm32f103c8t6)
+- [RS555](https://icdayroi.com/dong-co-rs555-12-24v)
 
 ### Connect
 
@@ -67,7 +68,7 @@ Speed - Angle
 90 0
 ```
 
-> :warning: Warning: Khi chuyển từ mode vận tốc sang góc hoặc ngược lại cần truyền trước tham sô `0 0`
+> :warning: Warning:When switching from velocity mode to angle mode or vice versa, it is necessary to transmit the parameter first. `0 0`. Ex:
 ```
 pi@raspberrypi:~/Desktop/Nhan_CDT/temp1/pwm_driver $ sudo ./test_dc_driver
 Speed - Angle 
