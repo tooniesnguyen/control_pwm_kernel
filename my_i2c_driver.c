@@ -5,21 +5,24 @@
 #include <linux/fs.h>
 #include <linux/uaccess.h>
 
+//Macros for driver name, class name and device name
 #define DRIVER_NAME "dc_driver"
 #define CLASS_NAME "dc_driver"
 #define DEVICE_NAME "dc_driver"
 
 
-
+//General description for driver
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Huynh Anh Duy");
 MODULE_DESCRIPTION("I2C driver for control DC motor");
 
+// Define static variables for the i2c client, driver class, driver device, and major number
 static struct i2c_client *dcDriver_client;
 static struct class* dcDriver_class = NULL;
 static struct device* dcDriver_device = NULL;
 static int major_number;
 
+//Define an enum for module's register
 typedef enum SwerveParamRegister{
 	DEV_REG_SPEED_KP = 1,
 	DEV_REG_SPEED_KI,
@@ -34,18 +37,21 @@ typedef enum SwerveParamRegister{
 	DEV_REG_MODE,
 }SwerveParamRegister;
 
+//Define cmd for in out control 
 #define SWERVE_MODULE_MAGIC_WORD 's'
 #define SWERVE_IOCTL_SEND_TARGET_SPEED _IOW(SWERVE_MODULE_MAGIC_WORD,DEV_REG_TARGET_SPEED,u8)
 #define SWERVE_IOCTL_SEND_TARGET_ANGLE _IOW(SWERVE_MODULE_MAGIC_WORD,DEV_REG_TARGET_ANGLE,u8)
 #define SWERVE_IOCTL_SET_MODE _IOW(SWERVE_MODULE_MAGIC_WORD,DEV_REG_MODE,u8)
 #define SWERVE_IOCTL_READ_CURRENT_ANGLE _IOR(SWERVE_MODULE_MAGIC_WORD,17,int)
 
+//Define i2c device id list
 static struct i2c_device_id my_ids[] = {
 	{"dc_driver", 0},
     {},
 };
 MODULE_DEVICE_TABLE(i2c, my_ids);
 
+//Function for read data from module's register DEV_REG_TARGET_ANGLE
 static int dcDriver_read(struct i2c_client *client)
 {
     u8 buf[1];
@@ -58,6 +64,7 @@ static int dcDriver_read(struct i2c_client *client)
     return buf[0];
 }
 
+//Function for read data from module's register
 static u8 dcDriver_received_data(struct i2c_client *client, u8 reg)
 {
     u8 value;
@@ -66,6 +73,7 @@ static u8 dcDriver_received_data(struct i2c_client *client, u8 reg)
     return value;
 }
 
+//Function for send data to module's register
 static int dcDriver_send_data(struct i2c_client *client, u8 data, u8 reg)
 {
     if(i2c_smbus_write_byte_data(client, reg, data) < 0){
@@ -76,6 +84,7 @@ static int dcDriver_send_data(struct i2c_client *client, u8 data, u8 reg)
     return 1;
 }
 
+//In out control for user interface
 static long dcDriver_ioctl(struct file *file, unsigned int cmd, unsigned long arg){
     int data;
     u8 value;
@@ -118,54 +127,49 @@ static long dcDriver_ioctl(struct file *file, unsigned int cmd, unsigned long ar
     return 0;
 }    
 
-
+//Open function for file operations
 static int dcDriver_open(struct inode *inodep, struct file *filep)
 {
     printk(KERN_INFO "dc_driver device opened\n");
     return 0;
 }
 
+//Release function for file operations
 static int dcDriver_release(struct inode *inodep, struct file *filep)
 {
     printk(KERN_INFO "dc_driver device closed\n");
     return 0;
 }
 
+//Define file operations struct for driver
 static struct file_operations fops = {
     .open = dcDriver_open,
     .unlocked_ioctl = dcDriver_ioctl,
     .release = dcDriver_release,
 };
 
+//Define probe function for driver
 static int my_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {	
     dcDriver_client = client;
     printk("dc_driver - Now I am in the probe function!\n");
     
     // Create a char device
-    // https://archive.kernel.org/oldlinux/htmldocs/kernel-api/API---register-chrdev.html
-    // Positive: the number of major that successful registered
     major_number = register_chrdev(0, DEVICE_NAME, &fops);
     if (major_number < 0) {
         printk(KERN_ERR "Failed to register a major number\n");
         return major_number;
     }
-
-    // https://www.kernel.org/doc/html/latest/driver-api/infrastructure.html?highlight=class_create
-    // THIS_MODULE là tiêu chuẩn để địa diện cho module hiện tại
-    // This is used to create a struct class pointer that can then be used in calls to device_create().
+	
+	//Create class
     dcDriver_class = class_create(THIS_MODULE, CLASS_NAME);
     if (IS_ERR(dcDriver_class)) {
-        // https://manpages.debian.org/testing/linux-manual-4.8/__unregister_chrdev.9
-        // Unregister and destroy the cdev occupying the region described by major, baseminor and count. This function undoes what __register_chrdev did.
         unregister_chrdev(major_number, DEVICE_NAME);
         printk(KERN_ERR "Failed to register device class\n");
         return PTR_ERR(dcDriver_class);
     }
-
-    // https://www.kernel.org/doc/html/latest/driver-api/infrastructure.html?highlight=device_create
-    // A struct device will be created in sysfs, registered to the specified class.
-    // MKDEV(int major, int minor) gộp số major và minor để tạo thành device number
+	
+	//Create device 
     dcDriver_device = device_create(dcDriver_class, NULL, MKDEV(major_number, 0), NULL, DEVICE_NAME);
     if (IS_ERR(dcDriver_device)) {
         class_destroy(dcDriver_class);
@@ -180,6 +184,7 @@ static int my_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	return 0;
 }
 
+//Define remove function for driver
 static void my_remove(struct i2c_client *client)
 {
     device_destroy(dcDriver_class, MKDEV(major_number, 0));
@@ -189,12 +194,14 @@ static void my_remove(struct i2c_client *client)
     printk("my_i2c_driver - Removing device\n");
 }
 
+//Define device id 
 static const struct of_device_id dcDriver_of_match[] = {
     { .compatible = "SPK-Turbo,dc_driver", },
     { },
 };
 MODULE_DEVICE_TABLE(of, dcDriver_of_match);
 
+//Define i2c driver struct
 static struct i2c_driver my_driver= {
 	.probe = my_probe,
 	.remove = my_remove,
@@ -205,4 +212,5 @@ static struct i2c_driver my_driver= {
 	}
 };
 
+//Create i2c driver module
 module_i2c_driver(my_driver);
