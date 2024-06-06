@@ -143,19 +143,29 @@ static int my_probe(struct i2c_client *client, const struct i2c_device_id *id)
     printk("dc_driver - Now I am in the probe function!\n");
     
     // Create a char device
+    // https://archive.kernel.org/oldlinux/htmldocs/kernel-api/API---register-chrdev.html
+    // Positive: the number of major that successful registered
     major_number = register_chrdev(0, DEVICE_NAME, &fops);
     if (major_number < 0) {
         printk(KERN_ERR "Failed to register a major number\n");
         return major_number;
     }
 
+    // https://www.kernel.org/doc/html/latest/driver-api/infrastructure.html?highlight=class_create
+    // THIS_MODULE là tiêu chuẩn để địa diện cho module hiện tại
+    // This is used to create a struct class pointer that can then be used in calls to device_create().
     dcDriver_class = class_create(THIS_MODULE, CLASS_NAME);
     if (IS_ERR(dcDriver_class)) {
+        // https://manpages.debian.org/testing/linux-manual-4.8/__unregister_chrdev.9
+        // Unregister and destroy the cdev occupying the region described by major, baseminor and count. This function undoes what __register_chrdev did.
         unregister_chrdev(major_number, DEVICE_NAME);
         printk(KERN_ERR "Failed to register device class\n");
         return PTR_ERR(dcDriver_class);
     }
 
+    // https://www.kernel.org/doc/html/latest/driver-api/infrastructure.html?highlight=device_create
+    // A struct device will be created in sysfs, registered to the specified class.
+    // MKDEV(int major, int minor) gộp số major và minor để tạo thành device number
     dcDriver_device = device_create(dcDriver_class, NULL, MKDEV(major_number, 0), NULL, DEVICE_NAME);
     if (IS_ERR(dcDriver_device)) {
         class_destroy(dcDriver_class);

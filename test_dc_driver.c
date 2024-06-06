@@ -1,3 +1,4 @@
+/*CODE BEGIN Includes */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -6,15 +7,18 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <errno.h> // Include errno header
-#define DEVICE_PATH "/dev/dc_driver"
+/*CODE END Includes  */
 
+/*CODE BEGIN DEFINE */
+#define DEVICE_PATH "/dev/dc_driver"
 #define SWERVE_MODULE_MAGIC_WORD 's'
 #define SWERVE_IOCTL_SEND_TARGET_SPEED _IOW(SWERVE_MODULE_MAGIC_WORD,DEV_REG_TARGET_SPEED,uint8_t)
 #define SWERVE_IOCTL_SEND_TARGET_ANGLE _IOW(SWERVE_MODULE_MAGIC_WORD,DEV_REG_TARGET_ANGLE,uint8_t)
 #define SWERVE_IOCTL_SET_MODE _IOW(SWERVE_MODULE_MAGIC_WORD,DEV_REG_MODE,uint8_t)
 #define SWERVE_IOCTL_READ_CURRENT_ANGLE _IOR(SWERVE_MODULE_MAGIC_WORD,17,int)
+/*CODE END DEFINE */
 
-
+/*START INITIALIZING VARIABLES*/
 typedef enum SwerveParamRegister{
 	DEV_REG_SPEED_KP = 1,
 	DEV_REG_SPEED_KI,
@@ -29,8 +33,6 @@ typedef enum SwerveParamRegister{
 	DEV_REG_MODE,
 }SwerveParamRegister;
 
-
-
 uint8_t txBuffer[10] = {0};
 uint8_t rxBuffer[10] = {0};
 
@@ -38,6 +40,8 @@ uint8_t targetSpeed;
 uint8_t targetAngle;
 uint8_t mode_dc;
 uint8_t stage = 0;
+/*END INITIALIZING VARIABLES*/
+
 
 void PutMessage(void* data, uint8_t sizeOfData)
 {
@@ -59,12 +63,12 @@ int main() {
     int fd;
     int readData;
 
-                // Open the device
-            fd = open(DEVICE_PATH, O_RDWR);
-            if (fd < 0) {
-                perror("Failed to open the device");
-                return errno;
-            }
+        // Open the device
+    fd = open(DEVICE_PATH, O_RDWR);
+    if (fd < 0) {
+        perror("Failed to open the device");
+        return errno;
+    }
            
     printf("Speed - Angle \n");
     while(1)
