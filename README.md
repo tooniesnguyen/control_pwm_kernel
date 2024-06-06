@@ -3,7 +3,7 @@
 ### Hardware requirements
 - [Raspberry Pi 3 Model B+](https://raspberrypi.vn/san-pham/raspberry-pi-3-model-b)
 - [PID Driver for DC motor](http://www.roboconshop.com/San-Pham/%C4%90ien-tu/Driver-and-controller/PID-Driver-for-DC-motor.aspx)
-- [STM32 F4]()
+- [STM32 F103C8T6]()
 
 ### Connect
 
@@ -57,9 +57,31 @@ sudo rmmod my_i2c_driver.
 ```
 gcc -o test_dc_driver test_dc_driver.c -lm
 
-./test_dc_driver
+sudo ./test_dc_driver
 ```
 
+### Example send speed mode
+```
+pi@raspberrypi:~/Desktop/Nhan_CDT/temp1/pwm_driver $ sudo ./test_dc_driver
+Speed - Angle
+90 0
+```
+
+> :warning: Warning: Khi chuyển từ mode vận tốc sang góc hoặc ngược lại cần truyền trước tham sô `0 0`
+```
+pi@raspberrypi:~/Desktop/Nhan_CDT/temp1/pwm_driver $ sudo ./test_dc_driver
+Speed - Angle 
+90 0
+0  0
+0 40
+```
+
+### Example send Angle mode
+```
+pi@raspberrypi:~/Desktop/Nhan_CDT/temp1/pwm_driver $ sudo ./test_dc_driver
+Speed - Angle
+0 120
+```
 
 ### Tips
 Show the kernel log to check the install state or instantiated:

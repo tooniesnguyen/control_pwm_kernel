@@ -69,7 +69,7 @@ int main() {
         perror("Failed to open the device");
         return errno;
     }
-           
+    
     printf("Speed - Angle \n");
     while(1)
     {
